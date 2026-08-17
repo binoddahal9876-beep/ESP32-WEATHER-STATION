@@ -5,8 +5,8 @@
   "display": "standalone",
   "icons": [
     {
-      "src": "Newicon.png",
-      "sizes": "512x512",
+      "src": "icon.png?v=fresh",
+      "sizes": "180x180",
       "type": "image/png"
     }
   ]
