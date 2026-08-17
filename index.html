@@ -1,0 +1,154 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>ESP32 Weather Station Dashboard</title>
+    
+    <!-- Free Open-Source Map Styles (Leaflet) -->
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+    
+    <style>
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background-color: #121212;
+            color: #ffffff;
+            margin: 0;
+            padding: 20px;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+        }
+        h1 { color: #4CAF50; }
+        
+        .dashboard {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 20px;
+            width: 100%;
+            max-width: 900px;
+            margin-bottom: 30px;
+        }
+        
+        .card {
+            background-color: #1e1e1e;
+            padding: 20px;
+            border-radius: 10px;
+            text-align: center;
+            box-shadow: 0 4px 6px rgba(0,0,0,0.3);
+            border-top: 4px solid;
+        }
+        
+        /* Card Colors */
+        #card-temp { border-color: #f44336; }
+        #card-hum { border-color: #2196F3; }
+        #card-pres { border-color: #ff9800; }
+        #card-alt { border-color: #9c27b0; }
+
+        .value { font-size: 2em; font-weight: bold; margin: 10px 0; }
+        .label { color: #aaaaaa; font-size: 0.9em; text-transform: uppercase; }
+        .timestamp { color: #888; font-size: 0.8em; margin-bottom: 20px; }
+
+        /* Map Container */
+        #map {
+            height: 400px;
+            width: 100%;
+            max-width: 900px;
+            border-radius: 10px;
+            box-shadow: 0 4px 6px rgba(0,0,0,0.3);
+            z-index: 1; /* Keeps map below menus if any */
+        }
+    </style>
+</head>
+<body>
+
+    <h1>🛰️ ESP32 Weather Station</h1>
+    <div class="timestamp" id="last-updated">Waiting for data...</div>
+
+    <div class="dashboard">
+        <div class="card" id="card-temp">
+            <div class="label">Temperature</div>
+            <div class="value" id="val-temp">-- °C</div>
+        </div>
+        <div class="card" id="card-hum">
+            <div class="label">Humidity</div>
+            <div class="value" id="val-hum">-- %</div>
+        </div>
+        <div class="card" id="card-pres">
+            <div class="label">Pressure</div>
+            <div class="value" id="val-pres">-- hPa</div>
+        </div>
+        <div class="card" id="card-alt">
+            <div class="label">Altitude</div>
+            <div class="value" id="val-alt">-- m</div>
+        </div>
+    </div>
+
+    <!-- The Map -->
+    <div id="map"></div>
+
+    <!-- Free Open-Source Map Logic (Leaflet) -->
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+    <script>
+        // === YOUR EXACT THINGSPEAK CHANNEL ID ===
+        const CHANNEL_ID = "3457990"; 
+        
+        // Initialize Map (Centered on null island initially)
+        const map = L.map('map').setView([0, 0], 2);
+        L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+            attribution: '© OpenStreetMap contributors'
+        }).addTo(map);
+        
+        let marker = L.marker([0, 0]).addTo(map);
+
+        // Function to fetch data from ThingSpeak
+        async function fetchData() {
+            try {
+                // ThingSpeak provides a free JSON API to read your channel
+                const response = await fetch(`https://api.thingspeak.com/channels/${CHANNEL_ID}/feeds/last.json`);
+                
+                // Catch if the channel hasn't received any data yet
+                if (!response.ok) {
+                   document.getElementById('last-updated').innerText = "Channel active, but no data received yet. Power on your ESP32!";
+                   return;
+                }
+                
+                const data = await response.json();
+
+                // Check if data is empty (channel exists but 0 entries)
+                if(!data || Object.keys(data).length === 0 || data === "-1") {
+                    document.getElementById('last-updated').innerText = "Waiting for the first data point from the ESP32...";
+                    return;
+                }
+
+                // Update text fields (Safely checking if fields exist yet)
+                document.getElementById('val-temp').innerText = data.field1 ? parseFloat(data.field1).toFixed(1) + ' °C' : '-- °C';
+                document.getElementById('val-hum').innerText = data.field2 ? parseFloat(data.field2).toFixed(1) + ' %' : '-- %';
+                document.getElementById('val-pres').innerText = data.field3 ? parseFloat(data.field3).toFixed(1) + ' hPa' : '-- hPa';
+                document.getElementById('val-alt').innerText = data.field4 ? parseFloat(data.field4).toFixed(1) + ' m' : '-- m';
+
+                // Update Map
+                const lat = parseFloat(data.field5);
+                const lon = parseFloat(data.field6);
+                
+                if (!isNaN(lat) && !isNaN(lon) && lat !== 0) {
+                    const newLatLng = new L.LatLng(lat, lon);
+                    marker.setLatLng(newLatLng);
+                    map.setView(newLatLng, 15); // Zoom level 15
+                }
+
+                // Update Timestamp
+                const date = new Date(data.created_at);
+                document.getElementById('last-updated').innerText = "Last Updated: " + date.toLocaleString();
+
+            } catch (error) {
+                console.error("Error fetching data: ", error);
+            }
+        }
+
+        // Fetch data immediately, then every 15 seconds
+        fetchData();
+        setInterval(fetchData, 15000);
+    </script>
+</body>
+</html>
